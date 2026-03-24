@@ -4,7 +4,9 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Literal, Optional
+
+from pydantic import BaseModel, Field
 
 try:
     import yaml  # type: ignore
@@ -19,6 +21,54 @@ DEFAULT_RULE_CANDIDATES = [
 ]
 DEFAULT_REASON_CODES = BASE_DIR / "policies" / "reason_codes.yaml"
 
+# ==========================================
+# 1. Pydantic 模型定义 (对齐 Schema 和 指引 2.1)
+# ==========================================
+
+class StructuredInput(BaseModel):
+    # 风控与用户状态 (这些可以有默认值，因为没传就代表正常)
+    emotion: Literal["neutral", "anxious", "angry", "urgent"] = "neutral"
+    abusive_language: bool = False
+    repeated_contact_count: int = 0
+    manual_review_required: bool = False
+
+    # 订单与商品基础状态
+    order_status: Optional[str] = None
+    goods_type: Optional[str] = None  # 改为 None
+    
+    # 状态标志 (必须为 None，区分“没说”和“说了没有”)
+    is_opened: Optional[bool] = None  # 改为 None
+    is_used: Optional[bool] = None    # 改为 None
+    is_redeemed: Optional[bool] = None
+    signed_days: Optional[int] = None
+
+    # 问题与证据
+    quality_issue: Optional[bool] = None # 改为 None
+    issue_type: Optional[str] = None
+    evidence_provided: Optional[bool] = None # 改为 None
+    wrong_item: Optional[bool] = None
+    missing_item: Optional[bool] = None
+    damaged_package: Optional[bool] = None
+
+    # 物流状态
+    delivery_type: Optional[str] = None
+    delivery_delay_minutes: Optional[int] = None
+    logistics_status: Optional[str] = None
+
+    # 营销状态
+    coupon_stackable: Optional[bool] = None
+    price_protect_eligible: Optional[bool] = None
+
+
+class PolicyDecision(BaseModel):
+    decision: str
+    reason_code: str
+    next_action: str
+    need_clarification: bool = False
+    clarify_questions: List[str] = Field(default_factory=list)
+    should_apologize: bool = False
+    escalate_to_human: bool = False
+
 
 @dataclass
 class RuleMatch:
@@ -27,54 +77,100 @@ class RuleMatch:
     output: dict[str, Any]
 
 
-SAMPLE_CASES: dict[str, dict[str, Any]] = {
-    "refund_processing": {
-        "scene": "REFUND_PROGRESS",
-        "order_status": "refund_processing",
+# ==========================================
+# 2. 槽位检查与追问引擎 (实现指引 2.2)
+# ==========================================
+
+SCENE_REQUIREMENTS = {
+    "RETURN_REFUND": {
+        "required_slots": ["goods_type", "is_opened", "is_used", "signed_days", "quality_issue"],
+        "questions": {
+            "signed_days": "请问您签收至今大概几天了？",
+            "is_opened": "请问商品目前是否已经拆封或使用？",
+            "is_used": "请问商品是否已经使用过？",
+            "quality_issue": "请问是单纯不想要了，还是商品本身存在质量问题？"
+        }
     },
-    "return_allowed": {
-        "scene": "RETURN_REFUND",
-        "goods_type": "general",
-        "signed_days": 5,
-        "is_opened": False,
-        "is_used": False,
-        "quality_issue": False,
+    "QUALITY_ISSUE": {
+        "required_slots": ["issue_type", "signed_days", "evidence_provided"],
+        "questions": {
+            "issue_type": "请问具体是什么问题，例如破损、无法使用，还是少件？",
+            "evidence_provided": "方便提供一下商品问题的图片或视频吗？",
+            "signed_days": "请问您是签收当天发现的吗，还是签收后几天发现的？"
+        }
     },
-    "customized_reject": {
-        "scene": "RETURN_REFUND",
-        "goods_type": "customized",
-        "quality_issue": False,
+    "WRONG_OR_MISSING_ITEM": {
+        "required_slots": ["wrong_item", "missing_item", "evidence_provided"],
+        "questions": {
+            "wrong_item": "请问是收到错商品，还是少发了商品/配件？",
+            "missing_item": "请问是收到错商品，还是少发了商品/配件？",
+            "evidence_provided": "方便拍一下外包装和实收商品给我吗？"
+        }
     },
-    "quality_need_evidence": {
-        "scene": "QUALITY_ISSUE",
-        "quality_issue": True,
-        "evidence_provided": False,
+    "LOGISTICS_EXCEPTION": {
+        "required_slots": ["logistics_status", "delivery_delay_minutes", "damaged_package"],
+        "questions": {
+            "logistics_status": "请问物流当前显示是什么状态？",
+            "delivery_delay_minutes": "大概比预计送达晚了多久？",
+            "damaged_package": "包裹外包装是否有破损？"
+        }
     },
-    "wrong_item_resend": {
-        "scene": "WRONG_OR_MISSING_ITEM",
-        "wrong_item": True,
-        "evidence_provided": True,
+    "ORDER_CANCEL_MODIFY": {
+        "required_slots": ["order_status"],
+        "questions": {
+            "order_status": "请问订单目前是待发货、已发货，还是已签收？"
+        }
     },
-    "delay_compensate": {
-        "scene": "LOGISTICS_EXCEPTION",
-        "delivery_type": "instant",
-        "delivery_delay_minutes": 45,
+    "PROMOTION_COUPON": {
+        "required_slots": ["coupon_stackable"],
+        "questions": {
+            "coupon_stackable": "页面是否提示不可叠加或不满足使用门槛？"
+        }
     },
-    "emotion_escalate": {
-        "manual_review_required": False,
-        "abusive_language": True,
-        "repeated_contact_count": 1,
-        "emotion": "angry",
+    "PRICE_PROTECTION": {
+        "required_slots": ["price_protect_eligible"],
+        "questions": {
+            "price_protect_eligible": "请问您下单后是否在价保期内发现降价，且页面显示支持价保？"
+        }
     },
+    "REFUND_PROGRESS": {
+        "required_slots": ["order_status"],
+        "questions": {
+            "order_status": "请问您目前的订单状态是退款处理中吗？"
+        }
+    }
 }
 
+
+def check_missing_slots(scene: str, input_data: StructuredInput) -> list[str]:
+    """检查缺失的槽位并返回对应的问题列表"""
+    if scene not in SCENE_REQUIREMENTS:
+        return []
+    
+    reqs = SCENE_REQUIREMENTS[scene]
+    missing_questions = []
+    
+    for slot in reqs["required_slots"]:
+        val = getattr(input_data, slot)
+        # 判断槽位是否缺失 (注意: bool 类型的 False 不是缺失, None 才是缺失)
+        if val is None:
+             q = reqs["questions"].get(slot)
+             if q and q not in missing_questions: # 防止重复问题
+                 missing_questions.append(q)
+                 
+    return missing_questions
+
+# ==========================================
+# 3. YAML 解析与规则评估 (保留之前的优秀实现，略作调整适应新结构)
+# ==========================================
+
+# ... (此处保留 load_yaml, parse_simple_yaml, split_key_value, parse_scalar, parse_cli_scalar, resolve_rule_file 完全不变)
 
 def load_yaml(path: Path) -> Any:
     if yaml is not None:
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return parse_simple_yaml(path.read_text(encoding="utf-8"))
-
 
 def parse_simple_yaml(text: str) -> Any:
     lines: list[tuple[int, str]] = []
@@ -109,14 +205,11 @@ def parse_simple_yaml(text: str) -> Any:
                 break
             if indent != expected_indent or not content.startswith("- "):
                 break
-
             item_content = content[2:].strip()
             index += 1
-
             if not item_content:
                 items.append(parse_block(expected_indent + 2))
                 continue
-
             if ":" in item_content:
                 key, raw_value = split_key_value(item_content)
                 item: dict[str, Any] = {}
@@ -124,7 +217,6 @@ def parse_simple_yaml(text: str) -> Any:
                     item[key] = parse_block(expected_indent + 4)
                 else:
                     item[key] = parse_scalar(raw_value)
-
                 while index < len(lines):
                     next_indent, next_content = lines[index]
                     if next_indent < expected_indent + 2:
@@ -133,17 +225,14 @@ def parse_simple_yaml(text: str) -> Any:
                         break
                     if next_indent != expected_indent + 2 or next_content.startswith("- "):
                         break
-
                     child_key, child_raw_value = split_key_value(next_content)
                     index += 1
                     if child_raw_value is None:
                         item[child_key] = parse_block(expected_indent + 4)
                     else:
                         item[child_key] = parse_scalar(child_raw_value)
-
                 items.append(item)
                 continue
-
             items.append(parse_scalar(item_content))
         return items
 
@@ -156,7 +245,6 @@ def parse_simple_yaml(text: str) -> Any:
                 break
             if indent != expected_indent or content.startswith("- "):
                 break
-
             key, raw_value = split_key_value(content)
             index += 1
             if raw_value is None:
@@ -164,9 +252,7 @@ def parse_simple_yaml(text: str) -> Any:
             else:
                 mapping[key] = parse_scalar(raw_value)
         return mapping
-
     return parse_block(0)
-
 
 def split_key_value(text: str) -> tuple[str, str | None]:
     key, _, value = text.partition(":")
@@ -176,7 +262,6 @@ def split_key_value(text: str) -> tuple[str, str | None]:
         return key, None
     return key, value
 
-
 def parse_scalar(value: str) -> Any:
     lowered = value.lower()
     if lowered == "true":
@@ -185,30 +270,22 @@ def parse_scalar(value: str) -> Any:
         return False
     if lowered in {"null", "none"}:
         return None
-
     if value.startswith("[") and value.endswith("]"):
         inner = value[1:-1].strip()
         if not inner:
             return []
         return [parse_scalar(part.strip()) for part in inner.split(",")]
-
     try:
         return int(value)
     except ValueError:
         pass
-
     try:
         return float(value)
     except ValueError:
         pass
-
-    if (value.startswith('"') and value.endswith('"')) or (
-        value.startswith("'") and value.endswith("'")
-    ):
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         return value[1:-1]
-
     return value
-
 
 def parse_cli_scalar(value: str) -> Any:
     if value.startswith("[") or value.startswith("{"):
@@ -218,25 +295,20 @@ def parse_cli_scalar(value: str) -> Any:
             return parse_scalar(value)
     return parse_scalar(value)
 
-
 def resolve_rule_file(rule_file: str | None) -> Path:
     if rule_file:
         path = Path(rule_file)
         if not path.is_absolute():
             path = BASE_DIR / path
         return path
-
     for candidate in DEFAULT_RULE_CANDIDATES:
         if candidate.exists():
             return candidate
-
-    raise FileNotFoundError(
-        "No rule file found. Tried: "
-        + ", ".join(str(path) for path in DEFAULT_RULE_CANDIDATES)
-    )
+    raise FileNotFoundError("No rule file found.")
 
 
 def get_field_value(payload: dict[str, Any], field: str) -> Any:
+    # 支持点号语法，例如 structured_input.goods_type
     current: Any = payload
     for part in field.split("."):
         if not isinstance(current, dict) or part not in current:
@@ -273,7 +345,7 @@ def match_leaf(condition: dict[str, Any], payload: dict[str, Any]) -> bool:
 
 
 def match_condition(condition: dict[str, Any], payload: dict[str, Any]) -> bool:
-    if not condition:  # 【新增】处理 when: {} 的情况，表示无条件匹配
+    if not condition:
         return True
     if "all" in condition:
         return all(match_condition(item, payload) for item in condition["all"])
@@ -282,165 +354,131 @@ def match_condition(condition: dict[str, Any], payload: dict[str, Any]) -> bool:
     return match_leaf(condition, payload)
 
 
-def evaluate_rules(rules: list[dict[str, Any]], payload: dict[str, Any]) -> list[RuleMatch]:
+# ==========================================
+# 4. 核心调度与执行
+# ==========================================
+
+def evaluate_case(scene: str, input_dict: dict, rules: list) -> PolicyDecision:
+    """整合 Pydantic 校验、缺槽检查和 YAML 规则评估的核心函数"""
+    
+    # 1. Pydantic 强类型转换与填充默认值
+    try:
+        structured_data = StructuredInput(**input_dict)
+    except Exception as e:
+        # 如果类型严重错误，兜底报错
+        return PolicyDecision(
+            decision="ESCALATE", reason_code="SYSTEM_ERROR", 
+            next_action="TRANSFER_TO_HUMAN", escalate_to_human=True
+        )
+
+    # 2. 高优先级风控检查 (指引的 Step 1)
+    if structured_data.manual_review_required or structured_data.abusive_language or (structured_data.repeated_contact_count >= 3 and structured_data.emotion in ["angry", "urgent"]):
+         return PolicyDecision(
+            decision="ESCALATE", reason_code="EMOTION_ESCALATION", 
+            next_action="TRANSFER_TO_HUMAN", should_apologize=True, escalate_to_human=True
+        )
+
+    # 3. 缺槽检查 (指引的 Step 3)
+    missing_qs = check_missing_slots(scene, structured_data)
+    if missing_qs:
+        return PolicyDecision(
+            decision="CLARIFY",
+            reason_code="INSUFFICIENT_INFORMATION",
+            next_action="ASK_FOR_ORDER_INFO",
+            need_clarification=True,
+            clarify_questions=missing_qs,
+            should_apologize=True
+        )
+
+    # 4. 送入 YAML 引擎进行逻辑裁决
+    # 【修复 1】使用 model_dump() 替代废弃的 dict()
+    eval_payload = structured_data.model_dump() 
+    eval_payload["scene"] = scene
+    
     matches: list[RuleMatch] = []
     for rule in sorted(rules, key=lambda item: item.get("priority", 0), reverse=True):
         when = rule.get("when", {})
-        if match_condition(when, payload):
-            matches.append(
-                RuleMatch(
-                    rule_id=str(rule.get("id", "UNKNOWN")),
-                    priority=int(rule.get("priority", 0)),
-                    output=rule.get("then", {}),
-                )
-            )
-    return matches
+        if match_condition(when, eval_payload):
+            matches.append(RuleMatch(
+                rule_id=str(rule.get("id", "UNKNOWN")),
+                priority=int(rule.get("priority", 0)),
+                output=rule.get("then", {})
+            ))
+            break # 命中最高优先级即退出
 
+    if matches:
+        out = matches[0].output
+        return PolicyDecision(
+            decision=out.get("decision", "CLARIFY"),
+            reason_code=out.get("reason_code", "UNKNOWN"),
+            next_action=out.get("next_action", "ASK_FOR_ORDER_INFO"),
+            should_apologize=out.get("should_apologize", False),
+            escalate_to_human=out.get("escalate_to_human", False)
+        )
+        
+    # 5. 绝对兜底
+    return PolicyDecision(
+        decision="CLARIFY", reason_code="INSUFFICIENT_INFORMATION", next_action="ASK_FOR_ORDER_INFO"
+    )
 
 def load_cases(args: argparse.Namespace) -> list[tuple[str, dict[str, Any]]]:
-    if args.case_json:
-        return [("inline_case", json.loads(args.case_json))]
-
-    if args.kv:
-        case: dict[str, Any] = {}
-        for item in args.kv:
-            if "=" not in item:
-                raise ValueError(f"Invalid --kv item: {item}. Expected key=value.")
-            key, raw_value = item.split("=", 1)
-            case[key] = parse_cli_scalar(raw_value)
-        return [("kv_case", case)]
-
+    cases = []
     if args.case_file:
         case_path = Path(args.case_file)
         if not case_path.is_absolute():
             case_path = BASE_DIR / case_path
         content = json.loads(case_path.read_text(encoding="utf-8"))
         if isinstance(content, list):
-            # 如果 item 里有 "input" 键，就把里面的内容拿出来；顺便把 name 也拿出来
-            return [(item.get("name", f"case_{index + 1}"), item.get("input", item)) for index, item in enumerate(content)]
-        if isinstance(content, dict):
-            if all(isinstance(value, dict) for value in content.values()):
-                return [(name, value) for name, value in content.items()]
-            return [("file_case", content)]
-        raise ValueError("Case file must contain a JSON object or array.")
-
-    if args.sample:
-        return [(name, SAMPLE_CASES[name]) for name in args.sample]
-
-    return list(SAMPLE_CASES.items())
-
-
-def format_result(
-    case_name: str,
-    case_payload: dict[str, Any],
-    matches: list[RuleMatch],
-    reason_codes: dict[str, Any],
-) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "case_name": case_name,
-        "input": case_payload,
-        "matched": bool(matches),
-        "matched_rules": [
-            {
-                "rule_id": match.rule_id,
-                "priority": match.priority,
-                "decision": match.output.get("decision"),
-                "reason_code": match.output.get("reason_code"),
-                "next_action": match.output.get("next_action"),
-            }
-            for match in matches
-        ],
-        "final": matches[0].output if matches else None,
-    }
-
-    if matches:
-        reason_code = matches[0].output.get("reason_code")
-        if reason_code and reason_code in reason_codes:
-            result["reason_detail"] = reason_codes[reason_code]
-
-    return result
-
+            cases.extend([(item.get("name", f"case_{index + 1}"), item.get("input", item)) for index, item in enumerate(content)])
+        elif isinstance(content, dict):
+             cases.append(("file_case", content))
+             
+    # 【修复 2】把 --kv 解析逻辑加回来
+    if getattr(args, "kv", None):
+        kv_case = {}
+        for item in args.kv:
+            if "=" in item:
+                k, v = item.split("=", 1)
+                if v.lower() == "true": v = True
+                elif v.lower() == "false": v = False
+                elif v.isdigit(): v = int(v)
+                kv_case[k] = v
+        cases.append(("kv_case", kv_case))
+        
+    return cases
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Simple policy rule engine for validating YAML policy rules."
-    )
-    parser.add_argument(
-        "--rule-file",
-        help="Path to the rule YAML file. Defaults to policies/policy_rules_v1.yaml, then policies/policy_rules.yaml.",
-    )
-    parser.add_argument(
-        "--reason-codes",
-        default=str(DEFAULT_REASON_CODES),
-        help="Path to the reason code YAML file.",
-    )
-    parser.add_argument(
-        "--case-file",
-        help="Path to a JSON file containing one case object, a named-case object, or a list of case objects.",
-    )
-    parser.add_argument(
-        "--case-json",
-        help='Inline JSON case, for example: --case-json \'{"scene":"REFUND_PROGRESS","order_status":"refund_processing"}\'',
-    )
-    parser.add_argument(
-        "--kv",
-        nargs="*",
-        help="Key-value input for quick testing, for example: --kv scene=RETURN_REFUND signed_days=5 is_opened=false",
-    )
-    parser.add_argument(
-        "--sample",
-        action="append",
-        choices=sorted(SAMPLE_CASES.keys()),
-        help="Run one or more built-in sample cases. If omitted, all sample cases are executed.",
-    )
-    parser.add_argument(
-        "--list-samples",
-        action="store_true",
-        help="List available built-in sample cases and exit.",
-    )
-    parser.add_argument(
-        "--pretty",
-        action="store_true",
-        help="Pretty-print JSON output.",
-    )
+    parser = argparse.ArgumentParser(description="Policy Engine with Slot Checking")
+    parser.add_argument("--rule-file", help="Path to the rule YAML file.")
+    parser.add_argument("--case-file", help="Path to a JSON file containing cases.")
+    parser.add_argument("--kv", nargs="*", help="Key-value input for quick testing.") # 加回参数
+    parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     return parser
-
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.list_samples:
-        for sample_name in sorted(SAMPLE_CASES):
-            print(sample_name)
-        return 0
-
     rule_path = resolve_rule_file(args.rule_file)
-    if not rule_path.exists():
-        raise FileNotFoundError(f"Rule file not found: {rule_path}")
-
-    reason_path = Path(args.reason_codes)
-    if not reason_path.is_absolute():
-        reason_path = BASE_DIR / reason_path
-
     rules_config = load_yaml(rule_path)
     rules = rules_config.get("rules", [])
-    reason_codes = load_yaml(reason_path) if reason_path.exists() else {}
 
     results = []
     for case_name, case_payload in load_cases(args):
-        matches = evaluate_rules(rules, case_payload)
-        results.append(format_result(case_name, case_payload, matches, reason_codes))
+        scene = case_payload.get("scene", "UNKNOWN")
+        decision_obj = evaluate_case(scene, case_payload, rules)
+        
+        results.append({
+            "case_name": case_name,
+            "input_scene": scene,
+            # 【修复 1】使用 model_dump() 替代 dict()
+            "decision": decision_obj.model_dump() 
+        })
 
-    output = {
-        "rule_file": str(rule_path),
-        "rule_count": len(rules),
-        "results": results,
-    }
+    output = {"results": results}
     indent = 2 if args.pretty else None
     print(json.dumps(output, ensure_ascii=False, indent=indent))
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
