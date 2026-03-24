@@ -1,0 +1,95 @@
+RETURN_WITHIN_7D_UNOPENED:
+  scene: RETURN_REFUND
+  description: 7天内未拆封未使用，可退
+
+RETURN_EXCEED_7D:
+  scene: RETURN_REFUND
+  description: 超过无理由退货时限
+
+OPENED_OR_USED_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 商品已拆封或已使用，不支持无理由退
+
+FOOD_OPENED_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 食品类拆封后不支持无理由退
+
+FRESH_PERISHABLE_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 生鲜/易腐商品超时或已拆封受限
+
+CUSTOMIZED_NONQUALITY_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 定制商品非质量问题不可退
+
+VIRTUAL_REDEEMED_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 虚拟商品已兑换不可退
+
+QUALITY_EVIDENCE_REQUIRED:
+  scene: QUALITY_ISSUE
+  description: 质量问题需补充图片/视频/描述
+
+QUALITY_CONFIRMED_REFUND:
+  scene: QUALITY_ISSUE
+  description: 质量问题证据充分，可退款/售后
+
+WRONG_ITEM_CONFIRMED:
+  scene: WRONG_OR_MISSING_ITEM
+  description: 错发商品已确认
+
+MISSING_ITEM_CONFIRMED:
+  scene: WRONG_OR_MISSING_ITEM
+  description: 漏发商品已确认
+
+LOGISTICS_DELAY_COMPENSABLE:
+  scene: LOGISTICS_EXCEPTION
+  description: 物流延误可赔付
+
+LOGISTICS_LOST_REFUND:
+  scene: LOGISTICS_EXCEPTION
+  description: 物流丢件可退款
+
+PACKAGE_DAMAGED_EVIDENCE_REQUIRED:
+  scene: LOGISTICS_EXCEPTION
+  description: 包裹破损需补证据
+
+CANCEL_BEFORE_SHIP_ALLOWED:
+  scene: ORDER_CANCEL_MODIFY
+  description: 发货前可取消
+
+CANCEL_AFTER_SHIP_RESTRICTED:
+  scene: ORDER_CANCEL_MODIFY
+  description: 发货后不可直接取消
+
+COUPON_NOT_STACKABLE:
+  scene: PROMOTION_COUPON
+  description: 优惠券不可叠加
+
+COUPON_NOT_APPLICABLE:
+  scene: PROMOTION_COUPON
+  description: 当前商品/店铺/金额不满足券使用条件
+
+PRICE_PROTECT_ELIGIBLE:
+  scene: PRICE_PROTECTION
+  description: 满足价保条件
+
+PRICE_PROTECT_NOT_ELIGIBLE:
+  scene: PRICE_PROTECTION
+  description: 不满足价保条件
+
+REFUND_IN_PROGRESS:
+  scene: REFUND_PROGRESS
+  description: 退款处理中
+
+INVOICE_GUIDE_REQUIRED:
+  scene: INVOICE_REQUEST
+  description: 需引导开票或补充信息
+
+INSUFFICIENT_INFORMATION:
+  scene: COMMON
+  description: 信息不足，必须追问
+
+EMOTION_ESCALATION:
+  scene: EMOTIONAL_COMPLAINT
+  description: 强投诉/高风险，转人工

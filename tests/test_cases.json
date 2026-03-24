@@ -1,0 +1,240 @@
+[
+  {
+    "name": "R001: manual_review_required",
+    "input": {
+      "manual_review_required": true,
+      "abusive_language": false,
+      "repeated_contact_count": 0,
+      "emotion": "neutral"
+    },
+    "expected_rule_id": "R001"
+  },
+  {
+    "name": "R001: abusive_language",
+    "input": {
+      "manual_review_required": false,
+      "abusive_language": true,
+      "repeated_contact_count": 0,
+      "emotion": "neutral"
+    },
+    "expected_rule_id": "R001"
+  },
+  {
+    "name": "R001: repeated_contact + emotion",
+    "input": {
+      "manual_review_required": false,
+      "abusive_language": false,
+      "repeated_contact_count": 3,
+      "emotion": "angry"
+    },
+    "expected_rule_id": "R001"
+  },
+  {
+    "name": "R002: refund_progress",
+    "input": {
+      "scene": "REFUND_PROGRESS",
+      "order_status": "refund_processing"
+    },
+    "expected_rule_id": "R002"
+  },
+  {
+    "name": "R003: customized_return_reject",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "goods_type": "customized",
+      "quality_issue": false
+    },
+    "expected_rule_id": "R003"
+  },
+  {
+    "name": "R004: virtual_redeemed_reject",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "goods_type": "virtual",
+      "is_redeemed": true,
+      "quality_issue": false
+    },
+    "expected_rule_id": "R004"
+  },
+  {
+    "name": "R005: food_opened_reject",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "goods_type": "food",
+      "is_opened": true,
+      "quality_issue": false
+    },
+    "expected_rule_id": "R005"
+  },
+  {
+    "name": "R006: general_return_allowed",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "goods_type": "general",
+      "signed_days": 5,
+      "is_opened": false,
+      "is_used": false,
+      "quality_issue": false
+    },
+    "expected_rule_id": "R006"
+  },
+  {
+    "name": "R007: over_7days_reject",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "signed_days": 10,
+      "quality_issue": false,
+      "goods_type": "general"
+    },
+    "expected_rule_id": "R007"
+  },
+  {
+    "name": "R008: quality_need_evidence",
+    "input": {
+      "scene": "QUALITY_ISSUE",
+      "quality_issue": true,
+      "evidence_provided": false
+    },
+    "expected_rule_id": "R008"
+  },
+  {
+    "name": "R009: quality_refund",
+    "input": {
+      "scene": "QUALITY_ISSUE",
+      "quality_issue": true,
+      "evidence_provided": true
+    },
+    "expected_rule_id": "R009"
+  },
+  {
+    "name": "R010: wrong_item_resend",
+    "input": {
+      "scene": "WRONG_OR_MISSING_ITEM",
+      "wrong_item": true,
+      "missing_item": false,
+      "evidence_provided": true
+    },
+    "expected_rule_id": "R010"
+  },
+  {
+    "name": "R011: missing_item_resend",
+    "input": {
+      "scene": "WRONG_OR_MISSING_ITEM",
+      "wrong_item": false,
+      "missing_item": true,
+      "evidence_provided": true
+    },
+    "expected_rule_id": "R011"
+  },
+  {
+    "name": "R012: logistics_lost_refund",
+    "input": {
+      "scene": "LOGISTICS_EXCEPTION",
+      "logistics_status": "lost"
+    },
+    "expected_rule_id": "R012"
+  },
+  {
+    "name": "R013: instant_delay_compensate",
+    "input": {
+      "scene": "LOGISTICS_EXCEPTION",
+      "delivery_type": "instant",
+      "delivery_delay_minutes": 45
+    },
+    "expected_rule_id": "R013"
+  },
+  {
+    "name": "R013: standard_delay_compensate",
+    "input": {
+      "scene": "LOGISTICS_EXCEPTION",
+      "delivery_type": "standard",
+      "delivery_delay_minutes": 3000
+    },
+    "expected_rule_id": "R013"
+  },
+  {
+    "name": "R014: damaged_package_need_evidence",
+    "input": {
+      "scene": "LOGISTICS_EXCEPTION",
+      "damaged_package": true,
+      "evidence_provided": false
+    },
+    "expected_rule_id": "R014"
+  },
+  {
+    "name": "R015: cancel_before_ship_guide",
+    "input": {
+      "scene": "ORDER_CANCEL_MODIFY",
+      "order_status": "paid_unshipped"
+    },
+    "expected_rule_id": "R015"
+  },
+  {
+    "name": "R016: cancel_after_ship_reject",
+    "input": {
+      "scene": "ORDER_CANCEL_MODIFY",
+      "order_status": "shipped"
+    },
+    "expected_rule_id": "R016"
+  },
+  {
+    "name": "R017: coupon_not_stackable",
+    "input": {
+      "scene": "PROMOTION_COUPON",
+      "coupon_stackable": false
+    },
+    "expected_rule_id": "R017"
+  },
+  {
+    "name": "R018: price_protect_eligible_compensate",
+    "input": {
+      "scene": "PRICE_PROTECTION",
+      "price_protect_eligible": true
+    },
+    "expected_rule_id": "R018"
+  },
+  {
+    "name": "R019: price_protect_not_eligible_reject",
+    "input": {
+      "scene": "PRICE_PROTECTION",
+      "price_protect_eligible": false
+    },
+    "expected_rule_id": "R019"
+  },
+  {
+    "name": "R020: invoice_guide",
+    "input": {
+      "scene": "INVOICE_REQUEST"
+    },
+    "expected_rule_id": "R020"
+  },
+  {
+    "name": "Fallback: no_rule_matches",
+    "input": {
+      "scene": "UNKNOWN_CATEGORY"
+    },
+    "expected_rule_id": "R999"
+  },
+  {
+    "name": "Priority: customized_over_time",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "goods_type": "customized",
+      "signed_days": 10,
+      "quality_issue": false
+    },
+    "expected_rule_id": "R003"
+  },
+  {
+    "name": "Priority: food_opened_over_time",
+    "input": {
+      "scene": "RETURN_REFUND",
+      "goods_type": "food",
+      "is_opened": true,
+      "signed_days": 10,
+      "quality_issue": false
+    },
+    "expected_rule_id": "R005"
+  }
+  
+]
