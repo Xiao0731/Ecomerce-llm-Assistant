@@ -1,444 +1,104 @@
-rules:
-  # R001 (转人工/风控拦截)：
-  # 必须人工审核、用户使用了辱骂性语言，或者用户重复进线超过 3 次且情绪愤怒/焦急
-  # -> ESCALATE：转交真人客服
-  - id: R001
-    priority: 100
-    when:
-      any:
-        - field: manual_review_required
-          eq: true
-        - field: abusive_language
-          eq: true
-        - all:
-            - field: repeated_contact_count
-              gte: 3
-            - field: emotion
-              in: [angry, urgent]
-    then:
-      decision: ESCALATE
-      reason_code: EMOTION_ESCALATION
-      next_action: TRANSFER_TO_HUMAN
-      should_apologize: true
-      escalate_to_human: true
+RETURN_WITHIN_7D_UNUSED:
+  scene: RETURN_REFUND
+  description: 7天内未使用（可拆封），可退
 
-  # R002 (退款进度)
-  # 退款场景，且订单状态已经是“退款请求中”或“退款处理中”
-  # -> PROCESSING：向用户解释进度，不用查询无用商品信息
-  - id: R002
-    priority: 95
-    when:
-      all:
-        - field: scene
-          eq: REFUND_PROGRESS
-        - field: order_status
-          in: [refund_requested, refund_processing]
-    then:
-      decision: PROCESSING
-      reason_code: REFUND_IN_PROGRESS
-      next_action: EXPLAIN_REFUND_PROGRESS
-      should_apologize: false
-      escalate_to_human: false
+RETURN_EXCEED_7D:
+  scene: RETURN_REFUND
+  description: 超过无理由退货时限
 
-  # R003 (定制商品)
-  # 定制商品，只要不是质量问题，一律 REJECT 拒绝无理由退货
-  - id: R003
-    priority: 90
-    when:
-      all:
-        - field: scene
-          eq: RETURN_REFUND
-        - field: goods_type
-          eq: customized
-        - field: quality_issue
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: CUSTOMIZED_NONQUALITY_RESTRICTED
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+OPENED_OR_USED_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 商品已拆封或已使用，不支持无理由退
 
-  # R004 (虚拟服务)
-  # 虚拟商品或服务，且已经被兑换，非质量问题一律 REJECT
-  - id: R004
-    priority: 89
-    when:
-      all:
-        - field: scene
-          eq: RETURN_REFUND
-        - field: goods_type
-          in: [virtual, service]
-        - field: is_redeemed
-          eq: true
-        - field: quality_issue
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: VIRTUAL_REDEEMED_RESTRICTED
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+FOOD_OPENED_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 食品类拆封后不支持无理由退
 
-  # R005 (生鲜食品)
-  # 食品、生鲜或医药类商品，只要拆封了，非质量问题一律 REJECT
-  - id: R005
-    priority: 88
-    when:
-      all:
-        - field: scene
-          eq: RETURN_REFUND
-        - field: goods_type
-          in: [food, fresh, medicine]
-        - field: is_opened
-          eq: true
-        - field: quality_issue
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: FOOD_OPENED_RESTRICTED
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+FRESH_PERISHABLE_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 生鲜/易腐商品超时或已拆封受限
 
-  # R006_A (已使用拒退)
-  # 只要商品已使用，且非质量问题，一律拒绝退货
-  - id: R006_A
-    priority: 85
-    when:
-      all:
-        - field: scene
-          eq: RETURN_REFUND
-        - field: is_used
-          eq: true
-        - field: quality_issue
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: OPENED_OR_USED_RESTRICTED
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+CUSTOMIZED_NONQUALITY_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 定制商品非质量问题不可退
 
-  # R006_B (超时拒退)
-  # 只要签收天数超过 7 天且非质量问题，直接 REJECT
-  - id: R006_B
-    priority: 80
-    when:
-      all:
-        - field: scene
-          eq: RETURN_REFUND
-        - field: signed_days
-          gt: 7
-        - field: quality_issue
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: RETURN_EXCEED_7D
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+VIRTUAL_REDEEMED_RESTRICTED:
+  scene: RETURN_REFUND
+  description: 虚拟商品已兑换不可退
 
-  # R006_C (七天无理由通过)
-  # 常规商品，只要在7天内且未使用（允许拆封），就可以退，判定为RETURN
-  # 解决了最初“衣服拆了不给退”的漏洞
-  - id: R006_C
-    priority: 75
-    when:
-      all:
-        - field: scene
-          eq: RETURN_REFUND
-        - field: goods_type
-          eq: general
-        - field: signed_days
-          lte: 7
-        - field: is_used
-          eq: false
-        - field: quality_issue
-          eq: false
-    then:
-      decision: RETURN
-      reason_code: RETURN_WITHIN_7D_UNOPENED
-      next_action: START_RETURN_FLOW
-      should_apologize: false
-      escalate_to_human: false
+QUALITY_EVIDENCE_REQUIRED:
+  scene: QUALITY_ISSUE
+  description: 质量问题需补充图片/视频/描述
 
-  # R008 (缺证据追问)
-  # 用户反馈有质量问题，但没提供证据图片/视频
-  # -> 判定为 CLARIFY，并触发要照片的动作（ASK_FOR_PHOTOS）
-  - id: R008
-    priority: 70
-    when:
-      all:
-        - field: scene
-          eq: QUALITY_ISSUE
-        - field: quality_issue
-          eq: true
-        - field: evidence_provided
-          eq: false
-    then:
-      decision: CLARIFY
-      reason_code: QUALITY_EVIDENCE_REQUIRED
-      next_action: ASK_FOR_PHOTOS
-      should_apologize: true
-      escalate_to_human: false
+QUALITY_CONFIRMED_REFUND:
+  scene: QUALITY_ISSUE
+  description: 质量问题证据充分，可退款/售后
 
-  # R009 (质量问题退款)
-  # 有质量问题且提供了证据，直接判定为 REFUND
-  - id: R009
-    priority: 69
-    when:
-      all:
-        - field: scene
-          eq: QUALITY_ISSUE
-        - field: quality_issue
-          eq: true
-        - field: evidence_provided
-          eq: true
-    then:
-      decision: REFUND
-      reason_code: QUALITY_CONFIRMED_REFUND
-      next_action: START_REFUND_FLOW
-      should_apologize: true
-      escalate_to_human: false
+WRONG_ITEM_CONFIRMED:
+  scene: WRONG_OR_MISSING_ITEM
+  description: 错发商品已确认
 
-  # R010 (错发)：错发且证据充分，判定为 RESEND
-  - id: R010
-    priority: 68
-    when:
-      all:
-        - field: scene
-          eq: WRONG_OR_MISSING_ITEM
-        - field: wrong_item
-          eq: true
-        - field: evidence_provided
-          eq: true
-    then:
-      decision: RESEND
-      reason_code: WRONG_ITEM_CONFIRMED
-      next_action: START_RESEND_FLOW
-      should_apologize: true
-      escalate_to_human: false
+MISSING_ITEM_CONFIRMED:
+  scene: WRONG_OR_MISSING_ITEM
+  description: 漏发商品已确认
 
-  # # R011 (漏发)：漏发且证据充分，判定为 RESEND
-  - id: R011
-    priority: 67
-    when:
-      all:
-        - field: scene
-          eq: WRONG_OR_MISSING_ITEM
-        - field: missing_item
-          eq: true
-        - field: evidence_provided
-          eq: true
-    then:
-      decision: RESEND
-      reason_code: MISSING_ITEM_CONFIRMED
-      next_action: START_RESEND_FLOW
-      should_apologize: true
-      escalate_to_human: false
+LOGISTICS_DELAY_COMPENSABLE:
+  scene: LOGISTICS_EXCEPTION
+  description: 物流延误可赔付
 
-  # R012 (物流丢件)
-  # 物流状态是 lost，直接判定退款 REFUND
-  - id: R012
-    priority: 60
-    when:
-      all:
-        - field: scene
-          eq: LOGISTICS_EXCEPTION
-        - field: logistics_status
-          eq: lost
-    then:
-      decision: REFUND
-      reason_code: LOGISTICS_LOST_REFUND
-      next_action: START_REFUND_FLOW
-      should_apologize: true
-      escalate_to_human: false
+LOGISTICS_NORMAL_DELAY:
+  scene: LOGISTICS_EXCEPTION
+  description: 物流延误未达赔付门槛，需安抚解释
 
-  # R013_A (达标延误赔付)
-  # 同城速递延误 ≥ 30 分钟，或者普通快递延误 ≥ 2880 分钟（48小时）
-  # -> COMPENSATE 触发赔付
-  - id: R013_A
-    priority: 59
-    when:
-      any:
-        - all:
-            - field: scene
-              eq: LOGISTICS_EXCEPTION
-            - field: delivery_type
-              eq: instant
-            - field: delivery_delay_minutes
-              gte: 30
-        - all:
-            - field: scene
-              eq: LOGISTICS_EXCEPTION
-            - field: delivery_type
-              in: [standard, same_day]
-            - field: delivery_delay_minutes
-              gte: 2880
-    then:
-      decision: COMPENSATE
-      reason_code: LOGISTICS_DELAY_COMPENSABLE
-      next_action: ISSUE_COMPENSATION
-      should_apologize: true
-      escalate_to_human: false
+LOGISTICS_LOST_REFUND:
+  scene: LOGISTICS_EXCEPTION
+  description: 物流丢件可退款
 
-  # R013_B (未达标延误安抚)
-  # 同样是延误，但时间没达到上述赔付门槛，判定为 GUIDE，耐心向用户解释目前的物流政策
-  # 补充了之前无法匹配赔付规则、又没有拒绝规则的bug
-  - id: R013_B
-    priority: 58
-    when:
-      any:
-        - all:
-            - field: scene
-              eq: LOGISTICS_EXCEPTION
-            - field: delivery_type
-              eq: instant
-            - field: delivery_delay_minutes
-              lt: 30
-        - all:
-            - field: scene
-              eq: LOGISTICS_EXCEPTION
-            - field: delivery_type
-              in: [standard, same_day]
-            - field: delivery_delay_minutes
-              lt: 2880
-    then:
-      decision: GUIDE
-      reason_code: LOGISTICS_NORMAL_DELAY
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+PACKAGE_DAMAGED_EVIDENCE_REQUIRED:
+  scene: LOGISTICS_EXCEPTION
+  description: 包裹破损需补证据
 
-  # R014 (包裹破损缺证据)
-  # 包裹外包装破了，但没照片，判定 CLARIFY 要照片 ASK_FOR_PHOTOS
-  - id: R014
-    priority: 57
-    when:
-      all:
-        - field: scene
-          eq: LOGISTICS_EXCEPTION
-        - field: damaged_package
-          eq: true
-        - field: evidence_provided
-          eq: false
-    then:
-      decision: CLARIFY
-      reason_code: PACKAGE_DAMAGED_EVIDENCE_REQUIRED
-      next_action: ASK_FOR_PHOTOS
-      should_apologize: true
-      escalate_to_human: false
+CANCEL_BEFORE_SHIP_ALLOWED:
+  scene: ORDER_CANCEL_MODIFY
+  description: 发货前可取消
 
-  # R015 (发货前取消)
-  # 订单没发货，判定为 GUIDE，引导用户在 APP 里自助取消
-  - id: R015
-    priority: 50
-    when:
-      all:
-        - field: scene
-          eq: ORDER_CANCEL_MODIFY
-        - field: order_status
-          in: [paid_unshipped, packed]
-    then:
-      decision: GUIDE
-      reason_code: CANCEL_BEFORE_SHIP_ALLOWED
-      next_action: GUIDE_CANCEL_SELF_SERVICE
-      should_apologize: false
-      escalate_to_human: false
+CANCEL_AFTER_SHIP_RESTRICTED:
+  scene: ORDER_CANCEL_MODIFY
+  description: 发货后不可直接取消
 
-  # R016 (发货后取消)
-  # 订单发货了，判定 REJECT，解释政策（需要等快递到了拒收）
-  - id: R016
-    priority: 49
-    when:
-      all:
-        - field: scene
-          eq: ORDER_CANCEL_MODIFY
-        - field: order_status
-          in: [shipped, delivered, signed]
-    then:
-      decision: REJECT
-      reason_code: CANCEL_AFTER_SHIP_RESTRICTED
-      next_action: EXPLAIN_POLICY
-      should_apologize: true
-      escalate_to_human: false
+COUPON_NOT_STACKABLE:
+  scene: PROMOTION_COUPON
+  description: 优惠券不可叠加
 
-  # R017 (优惠券限制)
-  # 优惠券如果被标记为不可叠加，REJECT 并解释规则
-  - id: R017
-    priority: 40
-    when:
-      all:
-        - field: scene
-          eq: PROMOTION_COUPON
-        - field: coupon_stackable
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: COUPON_NOT_STACKABLE
-      next_action: EXPLAIN_COUPON_RULE
-      should_apologize: false
-      escalate_to_human: false
+COUPON_NOT_APPLICABLE:
+  scene: PROMOTION_COUPON
+  description: 当前商品/店铺/金额不满足券使用条件
 
-  # R018(价保判定)
-  # 当前商品符合价格保护资格，则 COMPENSATE 补差价
-  - id: R018
-    priority: 35
-    when:
-      all:
-        - field: scene
-          eq: PRICE_PROTECTION
-        - field: price_protect_eligible
-          eq: true
-    then:
-      decision: COMPENSATE
-      reason_code: PRICE_PROTECT_ELIGIBLE
-      next_action: ISSUE_COMPENSATION
-      should_apologize: false
-      escalate_to_human: false
+PRICE_PROTECT_ELIGIBLE:
+  scene: PRICE_PROTECTION
+  description: 满足价保条件
 
-  # R019 (价保判定)
-  # 商品不符合价格保护资格，则 REJECT
-  - id: R019
-    priority: 34
-    when:
-      all:
-        - field: scene
-          eq: PRICE_PROTECTION
-        - field: price_protect_eligible
-          eq: false
-    then:
-      decision: REJECT
-      reason_code: PRICE_PROTECT_NOT_ELIGIBLE
-      next_action: EXPLAIN_POLICY
-      should_apologize: false
-      escalate_to_human: false
+PRICE_PROTECT_NOT_ELIGIBLE:
+  scene: PRICE_PROTECTION
+  description: 不满足价保条件
 
-  # R020 (发票引导)
-  # 只要涉及发票场景，一律 GUIDE 引导去开票页面
-  - id: R020
-    priority: 20
-    when:
-      all:
-        - field: scene
-          eq: INVOICE_REQUEST
-    then:
-      decision: GUIDE
-      reason_code: INVOICE_GUIDE_REQUIRED
-      next_action: GUIDE_INVOICE_APPLICATION
-      should_apologize: false
-      escalate_to_human: false
+REFUND_IN_PROGRESS:
+  scene: REFUND_PROGRESS
+  description: 退款处理中
 
-  # R999
-  # 以上问答无法匹配任意规则，请继续追问用户直到命中必要字段
-  # -> CLARIFY
-  - id: R999
-    priority: 0
-    when: {}
-    then:
-      decision: CLARIFY
-      reason_code: INSUFFICIENT_INFORMATION
-      next_action: ASK_FOR_ORDER_INFO
-      should_apologize: true
-      escalate_to_human: false
+INVOICE_GUIDE_REQUIRED:
+  scene: INVOICE_REQUEST
+  description: 需引导开票或补充信息
+
+INSUFFICIENT_INFORMATION:
+  scene: COMMON
+  description: 信息不足，必须追问
+
+# 在任何场景下都可能触发，因此scene改为COMMON
+EMOTION_ESCALATION:
+  scene: COMMON
+  description: 高风险或强投诉，转人工处理
+
+SYSTEM_ERROR:
+  scene: COMMON
+  description: 系统内部错误，转人工处理

@@ -76,7 +76,7 @@
       "is_used": false,
       "quality_issue": false
     },
-    "expected_rule_id": "R006"
+    "expected_rule_id": "R006_C"
   },
   {
     "name": "R007: over_7days_reject",
@@ -86,7 +86,7 @@
       "quality_issue": false,
       "goods_type": "general"
     },
-    "expected_rule_id": "R007"
+    "expected_rule_id": "R006_B"
   },
   {
     "name": "R008: quality_need_evidence",
@@ -141,16 +141,16 @@
       "delivery_type": "instant",
       "delivery_delay_minutes": 45
     },
-    "expected_rule_id": "R013"
+    "expected_rule_id": "R013_A"
   },
   {
     "name": "R013: standard_delay_compensate",
     "input": {
       "scene": "LOGISTICS_EXCEPTION",
       "delivery_type": "standard",
-      "delivery_delay_minutes": 3000
+      "delivery_delay_minutes": 2000
     },
-    "expected_rule_id": "R013"
+    "expected_rule_id": "R013_B"
   },
   {
     "name": "R014: damaged_package_need_evidence",
