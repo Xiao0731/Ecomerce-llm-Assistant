@@ -34,18 +34,18 @@ class StructuredInput(BaseModel):
 
     # 订单与商品基础状态
     order_status: Optional[str] = None
-    goods_type: Optional[str] = None  # 改为 None
+    goods_type: Optional[str] = None  
     
     # 状态标志 (必须为 None，区分“没说”和“说了没有”)
-    is_opened: Optional[bool] = None  # 改为 None
-    is_used: Optional[bool] = None    # 改为 None
+    is_opened: Optional[bool] = None  
+    is_used: Optional[bool] = None    
     is_redeemed: Optional[bool] = None
     signed_days: Optional[int] = None
 
     # 问题与证据
-    quality_issue: Optional[bool] = None # 改为 None
+    quality_issue: Optional[bool] = None 
     issue_type: Optional[str] = None
-    evidence_provided: Optional[bool] = None # 改为 None
+    evidence_provided: Optional[bool] = None 
     wrong_item: Optional[bool] = None
     missing_item: Optional[bool] = None
     damaged_package: Optional[bool] = None
@@ -61,13 +61,14 @@ class StructuredInput(BaseModel):
 
 
 class PolicyDecision(BaseModel):
-    decision: str
-    reason_code: str
-    next_action: str
-    need_clarification: bool = False
-    clarify_questions: List[str] = Field(default_factory=list)
-    should_apologize: bool = False
-    escalate_to_human: bool = False
+    matched_rule_id: str | None = None                          # 命中的规则ID
+    decision: str                                               # 决策
+    reason_code: str                                            
+    next_action: str                                            # 动作
+    need_clarification: bool = False                            # 是否需要追问
+    clarify_questions: List[str] = Field(default_factory=list)  # 追问的具体文字
+    should_apologize: bool = False                              # 是否应该道歉
+    escalate_to_human: bool = False                             # 是否需要转接人工
 
 
 @dataclass
