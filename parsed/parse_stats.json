@@ -2,24 +2,15 @@
   "input_file": "raw\\chat_0.1per.txt",
   "num_turns": 12136,
   "num_sessions": 994,
-  "num_batch1_candidates": 328,
-  "num_batch2_multiturn": 321,
-  "num_batch3_out_of_scope": 5359,
-  "scene_distribution": {
-    "ORDER_CANCEL_MODIFY": 44,
-    "INVOICE_REQUEST": 228,
-    "LOGISTICS_QUERY": 71,
-    "RETURN_REFUND": 179,
-    "WRONG_OR_MISSING_ITEM": 3,
-    "QUALITY_ISSUE": 32,
-    "PRICE_PROTECTION": 67,
-    "REFUND_PROGRESS": 1,
-    "LOGISTICS_EXCEPTION": 9,
-    "PROMOTION_COUPON": 15
+  "num_parsed_user_turns": 5901,
+  "num_ready_for_routing": 4460,
+  "num_needs_context": 548,
+  "num_discard_noise": 893,
+  "num_snapshot_only_skipped": 206,
+  "bucket_distribution": {
+    "ready_for_routing": 4460,
+    "needs_context": 548,
+    "discard_noise": 893
   },
-  "batch_distribution": {
-    "batch3_out_of_scope": 5359,
-    "batch1_candidate": 328,
-    "batch2_multiturn": 321
-  }
+  "history_window": 8
 }

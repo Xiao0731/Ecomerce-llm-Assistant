@@ -183,5 +183,3 @@ class CanonicalCase(BaseModel):
     structured_input: StructuredInput
     oracle: OracleOutput
     meta: MetaInfo
-    
-    # assistant_reply: str = ""
