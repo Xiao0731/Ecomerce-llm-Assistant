@@ -1,6 +1,6 @@
-RETURN_WITHIN_7D_UNOPENED:
+RETURN_WITHIN_7D_UNUSED:
   scene: RETURN_REFUND
-  description: 7天内未拆封未使用，可退
+  description: 7天内未使用（可拆封），可退
 
 RETURN_EXCEED_7D:
   scene: RETURN_REFUND
@@ -46,6 +46,10 @@ LOGISTICS_DELAY_COMPENSABLE:
   scene: LOGISTICS_EXCEPTION
   description: 物流延误可赔付
 
+LOGISTICS_NORMAL_DELAY:
+  scene: LOGISTICS_EXCEPTION
+  description: 物流延误未达赔付门槛，需安抚解释
+
 LOGISTICS_LOST_REFUND:
   scene: LOGISTICS_EXCEPTION
   description: 物流丢件可退款
@@ -90,6 +94,51 @@ INSUFFICIENT_INFORMATION:
   scene: COMMON
   description: 信息不足，必须追问
 
+# 在任何场景下都可能触发，因此scene改为COMMON
 EMOTION_ESCALATION:
-  scene: EMOTIONAL_COMPLAINT
-  description: 强投诉/高风险，转人工
+  scene: COMMON
+  description: 高风险或强投诉，转人工处理
+
+SYSTEM_ERROR:
+  scene: COMMON
+  description: 系统内部错误，转人工处理
+
+LOGISTICS_ETA_QUERY:
+  scene: LOGISTICS_QUERY
+  description: 用户咨询预计送达时间
+
+LOGISTICS_STATION_STATUS_QUERY:
+  scene: LOGISTICS_QUERY
+  description: 用户咨询当前站点/配送状态
+
+LOGISTICS_SELF_PICKUP_QUERY:
+  scene: LOGISTICS_QUERY
+  description: 用户咨询是否支持自提
+
+LOGISTICS_DELIVERY_COORDINATION_QUERY:
+  scene: LOGISTICS_QUERY
+  description: 用户咨询是否可提前配送、联系配送员或需保持电话畅通
+
+INVOICE_STATUS_QUERY:
+  scene: INVOICE_REQUEST
+  description: 查询发票或购物清单处理状态
+
+INVOICE_REISSUE_REQUEST:
+  scene: INVOICE_REQUEST
+  description: 发票补开或换开申请
+
+INVOICE_TYPE_CHANGE_REQUEST:
+  scene: INVOICE_REQUEST
+  description: 发票类型或抬头修改申请
+
+INVOICE_MAILING_CHANGE_REQUEST:
+  scene: INVOICE_REQUEST
+  description: 发票邮寄地址修改申请
+
+PRICE_PROTECT_AMOUNT_QUERY:
+  scene: PRICE_PROTECTION
+  description: 用户咨询价保金额计算逻辑
+
+PRICE_PROTECT_RETURN_CHANNEL_QUERY:
+  scene: PRICE_PROTECTION
+  description: 用户咨询价保退回路径
